@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>像素机甲对战</title>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="game-wrapper">
+    <!-- 标题栏 -->
+    <div class="title-bar">
+      <span class="title-p1">像素</span><span class="title-vs">机甲</span><span class="title-p2">对战</span>
+    </div>
+
+    <!-- 游戏画布 -->
+    <div class="canvas-wrapper">
+      <canvas id="gameCanvas" width="800" height="500"></canvas>
+    </div>
+
+    <!-- 底部提示 -->
+    <p class="bottom-hint" id="bottomHint">点击屏幕开始游戏</p>
+
+    <!-- 触屏控制区 (单玩家布局) -->
+    <div class="touch-controls" id="touchControls">
+      <!-- 左侧: 摇杆 -->
+      <div class="ctrl-zone ctrl-zone-left">
+        <div class="joystick-area" id="joystickMain">
+          <div class="joystick-base">
+            <div class="joystick-thumb" id="thumbMain"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右侧: 攻击/防御按钮 -->
+      <div class="ctrl-zone ctrl-zone-right">
+        <div class="btn-row btn-row-main">
+          <button class="ctrl-btn btn-attack" id="btnAttackMain">攻</button>
+          <button class="ctrl-btn btn-block" id="btnBlockMain">防</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 联机面板 -->
+  <div class="online-panel" id="onlinePanel">
+    <div class="online-panel-inner">
+      <div class="online-title">联机对战</div>
+      <div class="online-status" id="onlineStatus">未连接</div>
+      <div class="online-buttons">
+        <button class="online-btn" id="btnJoinMatch">匹配对手</button>
+        <button class="online-btn online-btn-cancel" id="btnCancelMatch">取消匹配</button>
+      </div>
+      <div class="online-info" id="onlineInfo">点击匹配, 系统将自动配对</div>
+      <button class="online-btn online-btn-close" id="btnClosePanel">关闭</button>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
