@@ -125,10 +125,9 @@ const Network = {
   gameOver: false,
 
   connect() {
-    const host = window.location.hostname || 'localhost';
-    const port = window.location.port || '3000';
-    // WebSocket 连接到当前 host 的 3000 端口
-    const wsUrl = `ws://${host}:${port}`;
+    const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+    const host = window.location.host;
+    const wsUrl = `${protocol}${host}`;
     try {
       this.ws = new WebSocket(wsUrl);
     } catch (e) {
