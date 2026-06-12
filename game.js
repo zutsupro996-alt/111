@@ -24,7 +24,7 @@ const Input = {
   keys: {}, pressed: {},
   init() {
     window.addEventListener('keydown', (e) => {
-      if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','Enter','ControlLeft','ShiftLeft'].includes(e.code)) e.preventDefault();
+      if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyJ','KeyK','Digit1','Digit2','Enter'].includes(e.code)) e.preventDefault();
       if (!this.keys[e.code]) this.pressed[e.code] = true;
       this.keys[e.code] = true;
     });
@@ -104,7 +104,7 @@ const Network = {
   matching: false,
 
   // 对手状态 (从服务器拉取)
-  oppState: { mecha: { x:0,y:0,facingRight:false,isAttacking:false,isBlocking:false }, bullets: [], hp: MAX_HP, gameOver: false, winner: null, opponentDisconnected: false },
+  oppState: { mecha: { x:700,y:368,facingRight:false,isAttacking:false,isBlocking:false }, bullets: [], hp: MAX_HP, gameOver: false, winner: null, opponentDisconnected: false },
 
   // 本机需要上传的子弹(一次性, 已上传后清空)
   myBullets: [],
@@ -315,6 +315,7 @@ class Mecha {
   }
 
   updateOnline(d) {
+    if (!d) return;
     this.x = d.x; this.y = d.y;
     this.facingRight = d.facingRight;
     this.isAttacking = d.isAttacking;

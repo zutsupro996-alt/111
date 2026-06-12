@@ -1,0 +1,1 @@
+s/if (\['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','Enter','ControlLeft','ShiftLeft'\].includes(e.code)) e.preventDefault();/if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyJ','KeyK','Digit1','Digit2','Enter'].includes(e.code)) e.preventDefault();/
