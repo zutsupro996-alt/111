@@ -119,7 +119,7 @@ const Network = {
   myRole: null, // 1 or 2
   opponent: { x: 0, y: 0, facingRight: false, hp: MAX_HP, isAttacking: false, isBlocking: false },
   syncTimer: 0,
-  syncInterval: 3, // 每3帧发送一次状态
+  syncInterval: 1, // 每帧发送状态, 降低延迟
   pendingDamage: 0,
   pendingBullets: [],
   gameOver: false,
@@ -452,7 +452,8 @@ class Mecha {
     const ta = TouchInput.wasAttackPressed();
     const ka = Input.wasPressed(this.controls.attack);
     if ((ta || ka) && this.attackCooldown <= 0) {
-      this.shoot(bullets);
+      const b = this.shoot(bullets);
+      if (Game.mode === 'online') Network.sendShoot(b);
       this.attackCooldown = ATTACK_COOLDOWN;
       this.isAttacking = true;
       setTimeout(() => { this.isAttacking = false; }, 100);
