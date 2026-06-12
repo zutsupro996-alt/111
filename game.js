@@ -24,7 +24,7 @@ const Input = {
   keys: {}, pressed: {},
   init() {
     window.addEventListener('keydown', (e) => {
-      if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyJ','KeyK','Digit1','Digit2','Enter'].includes(e.code)) e.preventDefault();
+      if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyJ','KeyK','Numpad1','Numpad2','Enter'].includes(e.code)) e.preventDefault();
       if (!this.keys[e.code]) this.pressed[e.code] = true;
       this.keys[e.code] = true;
     });
@@ -430,7 +430,7 @@ const Game = {
     for (let i = 0; i < 60; i++) this.bgStars.push({ x:Math.random()*CANVAS_W, y:Math.random()*CANVAS_H, size:Math.random()*2+1, twinkle:Math.random()*Math.PI*2 });
 
     this.mecha1 = new Mecha(1,100,GROUND_Y-MECHA_H,'#2979ff','#1565c0','#82b1ff',{up:'KeyW',down:'KeyS',left:'KeyA',right:'KeyD',attack:'KeyJ',block:'KeyK'},true);
-    this.mecha2 = new Mecha(2,CANVAS_W-100-MECHA_W,GROUND_Y-MECHA_H,'#ff1744','#b71c1c','#ff8a80',{up:'ArrowUp',down:'ArrowDown',left:'ArrowLeft',right:'ArrowRight',attack:'Digit1',block:'Digit2'},false);
+    this.mecha2 = new Mecha(2,CANVAS_W-100-MECHA_W,GROUND_Y-MECHA_H,'#ff1744','#b71c1c','#ff8a80',{up:'ArrowUp',down:'ArrowDown',left:'ArrowLeft',right:'ArrowRight',attack:'Numpad1',block:'Numpad2'},false);
 
     window.addEventListener('keydown', (e) => { if (e.code==='Enter' && this.state==='idle') this.startLocalGame(); if (e.code==='Enter' && this.state==='gameover') this.restartLocal(); });
     canvas.addEventListener('click', (e) => { e.stopPropagation(); if (this.state==='idle') this.startLocalGame(); if (this.state==='gameover') { if (this.mode==='online') this.restartOnline(); else this.restartLocal(); } });
