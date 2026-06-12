@@ -1,197 +1,178 @@
-// 像素机甲对战 - WebSocket 联机服务
-// 支持 1v1 玩家配对、状态同步
-
-const WebSocket = require('ws');
+// 像素机甲对战 - HTTP 轮询联机服务
 const http = require('http');
-const url = require('url');
 const fs = require('fs');
 const path = require('path');
 
 const PORT = process.env.PORT || 3000;
 
-// 玩家状态机
-const WAITING = 'waiting';
-const PLAYING = 'playing';
+// 状态存储
+const sessions = {};            // sessionId -> { state, opponentSessionId, role }
+const matchQueue = [];          // 等待匹配的 sessionId
 
-// 玩家集合
-let players = [];
-// 当前等待匹配的玩家
-let waitingPlayer = null;
+function createSession() {
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2);
+  sessions[id] = {
+    state: { mecha: null, bullets: [], hp: 100 },
+    opponentSessionId: null,
+    role: null,
+    lastSeen: Date.now()
+  };
+  return id;
+}
 
 const server = http.createServer((req, res) => {
-  let filePath = '.' + req.url;
-  if (filePath === './') {
-    filePath = './index.html';
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; }
+
+  const url = new URL(req.url, `http://${req.headers.host}`);
+
+  // 静态文件
+  if (req.method === 'GET' && !url.pathname.startsWith('/api/')) {
+    let filePath = '.' + url.pathname;
+    if (filePath === './') filePath = './index.html';
+    const ext = String(path.extname(filePath)).toLowerCase();
+    const ct = { '.html':'text/html','.css':'text/css','.js':'text/javascript','.json':'application/json','.png':'image/png' }[ext] || 'application/octet-stream';
+    fs.readFile(filePath, (err, data) => {
+      if (err) { res.writeHead(404); res.end('Not Found'); }
+      else { res.writeHead(200, { 'Content-Type': ct }); res.end(data); }
+    });
+    return;
   }
 
-  const extname = String(path.extname(filePath)).toLowerCase();
-  const contentType = {
-    '.html': 'text/html',
-    '.css': 'text/css',
-    '.js': 'text/javascript',
-    '.json': 'application/json',
-    '.png': 'image/png',
-    '.jpg': 'image/jpg',
-    '.gif': 'image/gif',
-    '.svg': 'image/svg+xml',
-    '.wav': 'audio/wav',
-    '.mp4': 'video/mp4',
-  }[extname] || 'application/octet-stream';
+  // API 请求 body 解析
+  let body = '';
+  req.on('data', chunk => body += chunk);
+  req.on('end', () => {
+    let data = {};
+    try { data = JSON.parse(body); } catch (e) {}
 
-  fs.readFile(filePath, (error, content) => {
-    if (error) {
-      if(error.code === 'ENOENT') {
-        res.writeHead(404);
-        res.end('File Not Found');
+    // 会话
+    let sessionId = url.searchParams.get('sessionId') || data.sessionId;
+    let session = sessions[sessionId];
+
+    // 创建会话
+    if (url.pathname === '/api/session' && req.method === 'POST') {
+      const id = createSession();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ sessionId: id }));
+      return;
+    }
+
+    if (!session) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid session' }));
+      return;
+    }
+    session.lastSeen = Date.now();
+
+    // 匹配
+    if (url.pathname === '/api/match' && req.method === 'POST') {
+      if (matchQueue.length > 0) {
+        // 配对成功
+        const opponentId = matchQueue.shift();
+        const opponent = sessions[opponentId];
+        session.role = 1;
+        session.opponentSessionId = opponentId;
+        opponent.role = 2;
+        opponent.opponentSessionId = sessionId;
+        // 通知双方
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'matched', role: 1 }));
+        return;
       } else {
-        res.writeHead(500);
-        res.end('Server Error: ' + error.code);
+        matchQueue.push(sessionId);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'waiting' }));
+        return;
       }
-    } else {
-      res.writeHead(200, { 'Content-Type': contentType });
-      res.end(content, 'utf-8');
     }
+
+    // 检查匹配状态 (轮询)
+    if (url.pathname === '/api/match-status' && req.method === 'GET') {
+      if (session.opponentSessionId) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'matched', role: session.role }));
+      } else {
+        // 检查是否还在队列中
+        const inQueue = matchQueue.includes(sessionId);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: inQueue ? 'waiting' : 'unknown' }));
+      }
+      return;
+    }
+
+    // 取消匹配
+    if (url.pathname === '/api/cancel' && req.method === 'POST') {
+      const idx = matchQueue.indexOf(sessionId);
+      if (idx > -1) matchQueue.splice(idx, 1);
+      if (session.opponentSessionId) {
+        const opp = sessions[session.opponentSessionId];
+        if (opp) { opp.opponentSessionId = null; }
+        session.opponentSessionId = null;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'cancelled' }));
+      return;
+    }
+
+    // 上传我的状态
+    if (url.pathname === '/api/state' && req.method === 'POST') {
+      session.state = {
+        mecha: data.mecha || session.state.mecha,
+        bullets: data.bullets || [],
+        hp: data.hp != null ? data.hp : session.state.hp,
+        gameOver: data.gameOver || false,
+        winner: data.winner || null
+      };
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true }));
+      return;
+    }
+
+    // 获取对手状态
+    if (url.pathname === '/api/state' && req.method === 'GET') {
+      const oppId = session.opponentSessionId;
+      const opponent = oppId ? sessions[oppId] : null;
+      if (!opponent || !opponent.state.mecha) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+          empty: true,
+          opponentDisconnected: session.opponentSessionId && (!opponent || Date.now() - opponent.lastSeen > 10000)
+        }));
+        return;
+      }
+      // 检查对手是否超时
+      const disconnected = Date.now() - opponent.lastSeen > 10000;
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        mecha: opponent.state.mecha,
+        bullets: opponent.state.bullets,
+        hp: opponent.state.hp,
+        gameOver: opponent.state.gameOver,
+        winner: opponent.state.winner,
+        opponentDisconnected: disconnected
+      }));
+      return;
+    }
+
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'not found' }));
   });
 });
 
-const wss = new WebSocket.Server({ server });
-
-wss.on('connection', (ws) => {
-  const playerId = Date.now() + Math.random().toString(36).slice(2);
-  const player = { id: playerId, ws, role: null, opponent: null, state: WAITING };
-  players.push(player);
-
-  console.log(`[connect] player ${playerId} connected. total: ${players.length}`);
-
-  ws.on('message', (data) => {
-    try {
-      const msg = JSON.parse(data);
-      handleMessage(player, msg);
-    } catch (e) {
-      console.error(`[message] parse error:`, e);
+// 清理过期会话 (每30秒)
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, s] of Object.entries(sessions)) {
+    if (now - s.lastSeen > 60000) {
+      delete sessions[id];
+      const qi = matchQueue.indexOf(id);
+      if (qi > -1) matchQueue.splice(qi, 1);
     }
-  });
-
-  ws.on('close', () => {
-    console.log(`[disconnect] player ${playerId} disconnected`);
-    // 清理
-    if (player.opponent) {
-      const opponent = players.find(p => p.id === player.opponent);
-      if (opponent && opponent.ws.readyState === WebSocket.OPEN) {
-        opponent.ws.send(JSON.stringify({ type: 'opponent_left' }));
-        opponent.state = WAITING;
-        opponent.opponent = null;
-      }
-    }
-    if (waitingPlayer && waitingPlayer.id === player.id) {
-      waitingPlayer = null;
-    }
-    players = players.filter(p => p.id !== playerId);
-  });
-
-  // 发送欢迎
-  ws.send(JSON.stringify({ type: 'welcome', playerId }));
-});
-
-function handleMessage(player, msg) {
-  switch (msg.type) {
-    case 'matchmaking':
-      startMatchmaking(player);
-      break;
-    case 'game_state':
-      // 转发对手状态
-      if (player.opponent && player.state === PLAYING) {
-        const opponent = players.find(p => p.id === player.opponent);
-        if (opponent && opponent.ws.readyState === WebSocket.OPEN) {
-          opponent.ws.send(JSON.stringify({
-            type: 'opponent_state',
-            mecha: msg.mecha,
-            bullets: msg.bullets,
-            hp: msg.hp
-          }));
-        }
-      }
-      break;
-    case 'attack':
-      // 转发攻击事件
-      if (player.opponent && player.state === PLAYING) {
-        const opponent = players.find(p => p.id === player.opponent);
-        if (opponent && opponent.ws.readyState === WebSocket.OPEN) {
-          opponent.ws.send(JSON.stringify({ type: 'opponent_attack', bullet: msg.bullet }));
-        }
-      }
-      break;
-    case 'damage':
-      // 伤害事件
-      if (player.opponent && player.state === PLAYING) {
-        const opponent = players.find(p => p.id === player.opponent);
-        if (opponent && opponent.ws.readyState === WebSocket.OPEN) {
-          opponent.ws.send(JSON.stringify({ type: 'damage', hp: msg.hp }));
-        }
-      }
-      break;
-    case 'game_over':
-      if (player.opponent && player.state === PLAYING) {
-        const opponent = players.find(p => p.id === player.opponent);
-        if (opponent && opponent.ws.readyState === WebSocket.OPEN) {
-          opponent.ws.send(JSON.stringify({ type: 'game_over', winner: msg.winner }));
-        }
-      }
-      break;
-    case 'restart':
-      if (player.opponent && player.state === WAITING) {
-        const opponent = players.find(p => p.id === player.opponent);
-        if (opponent && opponent.ws.readyState === WebSocket.OPEN) {
-          opponent.ws.send(JSON.stringify({ type: 'restart' }));
-        }
-      }
-      break;
-    default:
-      break;
   }
-}
-
-function startMatchmaking(player) {
-  // 如果有等待玩家，配对
-  if (waitingPlayer && waitingPlayer.id !== player.id) {
-    // 配对成功
-    player.role = 1;       // 玩家1 (蓝色)
-    waitingPlayer.role = 2; // 玩家2 (红色)
-    player.opponent = waitingPlayer.id;
-    waitingPlayer.opponent = player.id;
-    player.state = PLAYING;
-    waitingPlayer.state = PLAYING;
-
-    // 通知双方
-    player.ws.send(JSON.stringify({
-      type: 'matched',
-      role: player.role,
-      opponentId: waitingPlayer.id
-    }));
-    waitingPlayer.ws.send(JSON.stringify({
-      type: 'matched',
-      role: waitingPlayer.role,
-      opponentId: player.id
-    }));
-
-    console.log(`[match] paired ${player.id} (P${player.role}) vs ${waitingPlayer.id} (P${waitingPlayer.role})`);
-    waitingPlayer = null;
-  } else {
-    // 没有等待玩家，自己进入等待队列
-    if (waitingPlayer) {
-      // 踢掉之前的等待玩家（断开情况清理）
-      if (waitingPlayer.ws.readyState !== WebSocket.OPEN) {
-        waitingPlayer = null;
-      }
-    }
-    waitingPlayer = player;
-    player.state = WAITING;
-    player.ws.send(JSON.stringify({ type: 'waiting' }));
-    console.log(`[match] player ${player.id} waiting...`);
-  }
-}
+}, 30000);
 
 server.listen(PORT, () => {
-  console.log(`Pixel Mecha Online server running on http://localhost:${PORT}`);
-  console.log(`- Open this URL in two browser tabs to test 1v1 online`);
+  console.log(`Server running on port ${PORT}`);
 });
